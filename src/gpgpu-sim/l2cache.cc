@@ -712,6 +712,13 @@ unsigned memory_sub_partition::invalidateL2() {
   return 0;
 }
 
+unsigned memory_sub_partition::invalidateL2Except(std::vector<std::pair<size_t, size_t>> except_addr) {
+  if (!m_config->m_L2_config.disabled()) {
+    m_L2cache->invalidateExcept(except_addr);
+  }
+  return 0;
+}
+
 bool memory_sub_partition::busy() const { return !m_request_tracker.empty(); }
 
 std::vector<mem_fetch *>

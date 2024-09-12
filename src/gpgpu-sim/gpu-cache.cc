@@ -472,6 +472,28 @@ void tag_array::invalidate() {
   is_used = false;
 }
 
+void tag_array::invalidateExcept(std::vector<std::pair<size_t, size_t>> except_addr) {
+  if (!is_used) return;
+  for (unsigned i = 0; i < m_config.get_num_lines(); i++){
+    for (unsigned j = 0; j < SECTOR_CHUNCK_SIZE; j++){
+      bool invalidate_flag = true;
+      for (unsigned k = 0; k < except_addr.size(); k++){
+        size_t addre = except_addr[k].first;
+        size_t Bcount = except_addr[k].second;
+        if (m_lines[i]->get_status(mem_access_sector_mask_t().set(j)) != INVALID 
+            && m_lines[i]->m_block_addr + j * SECTOR_SIZE < addre + Bcount
+            && m_lines[i]->m_block_addr + (j + 1) * SECTOR_SIZE > addre)
+            invalidate_flag = false;
+      }
+      if (invalidate_flag)
+        m_lines[i]->set_status(INVALID, mem_access_sector_mask_t().set(j));
+    } 
+  }
+
+  m_dirty = 0;
+  is_used = false;
+}
+
 float tag_array::windowed_miss_rate() const {
   unsigned n_access = m_access - m_prev_snapshot_access;
   unsigned n_miss = (m_miss + m_sector_miss) - m_prev_snapshot_miss;

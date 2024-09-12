@@ -965,6 +965,7 @@ class tag_array {
 
   void flush();       // flush all written entries
   void invalidate();  // invalidate all entries
+  void invalidateExcept(std::vector<std::pair<size_t, size_t>> except_addr);  // invalidate entries except
   void new_window();
 
   void print(FILE *stream, unsigned &total_access,
@@ -1307,6 +1308,7 @@ class baseline_cache : public cache_t {
   // flash invalidate all entries in cache
   void flush() { m_tag_array->flush(); }
   void invalidate() { m_tag_array->invalidate(); }
+  void invalidateExcept(std::vector<std::pair<size_t, size_t>> except_addr) { m_tag_array->invalidateExcept(except_addr); }
   void print(FILE *fp, unsigned &accesses, unsigned &misses) const;
   void display_state(FILE *fp) const;
 

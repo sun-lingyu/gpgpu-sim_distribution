@@ -179,6 +179,7 @@ class memory_sub_partition {
 
   unsigned flushL2();
   unsigned invalidateL2();
+  unsigned invalidateL2Except(std::vector<std::pair<size_t, size_t>> except_addr);
 
   // interface to L2_dram_queue
   bool L2_dram_queue_empty() const;

@@ -236,6 +236,9 @@ void memory_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-gpgpu_perf_sim_memcpy", OPT_BOOL,
                          &m_perf_sim_memcpy, "Fill the L2 cache on memcpy",
                          "1");
+  option_parser_register(opp, "-gpgpu_memcpy_keep_l2", OPT_BOOL,
+                         &m_memcpy_keep_l2, "Keep the L2 cache on memcpy, use with -gpgpu_invalidate_l2_cache",
+                         "0");
   option_parser_register(opp, "-gpgpu_simple_dram_model", OPT_BOOL,
                          &simple_dram_model,
                          "simple_dram_model with fixed latency and BW", "0");
@@ -696,6 +699,9 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL,
                          &gpgpu_flush_l2_cache,
                          "Flush L2 cache at the end of each kernel call", "0");
+  option_parser_register(opp, "-gpgpu_invalidate_l2_cache", OPT_BOOL,
+                         &gpgpu_invalidate_l2_cache,
+                         "Invalidate L2 cache at the end of each kernel call", "0");
   option_parser_register(
       opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
       "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
@@ -2049,6 +2055,35 @@ void gpgpu_sim::cycle() {
             dlc = m_memory_sub_partition[i]->flushL2();
             assert(dlc == 0);  // TODO: need to model actual writes to DRAM here
             printf("Dirty lines flushed from L2 %d is %d\n", i, dlc);
+          }
+        }
+      }
+    }
+
+    if (m_config.gpgpu_invalidate_l2_cache) {
+      assert(!m_config.gpgpu_flush_l2_cache);
+      if (!m_config.gpgpu_flush_l1_cache) {
+        for (unsigned i = 0; i < m_shader_config->n_simt_clusters; i++) {
+          if (m_cluster[i]->get_not_completed() != 0) {
+            all_threads_complete = 0;
+            break;
+          }
+        }
+      }
+
+      if (all_threads_complete && !m_memory_config->m_L2_config.disabled()) {
+        printf("Invalidate L2 caches (except memcpy)...\n");
+        if (m_memory_config->m_L2_config.get_num_lines()) {
+          int dlc = 0;
+          for (unsigned i = 0; i < m_memory_config->m_n_mem; i++) {
+            if(m_memory_config->m_memcpy_keep_l2){
+              dlc = m_memory_sub_partition[i]->invalidateL2Except(memcpy_addrs); 
+            } else {
+              dlc = m_memory_sub_partition[i]->invalidateL2();
+            }
+            
+            assert(dlc == 0);  // TODO: need to model actual writes to DRAM here
+            //printf("Dirty lines flushed from L2 %d is %d\n", i, dlc);
           }
         }
       }

@@ -350,6 +350,7 @@ class memory_config {
   unsigned write_high_watermark;
   unsigned write_low_watermark;
   bool m_perf_sim_memcpy;
+  bool m_memcpy_keep_l2;
   bool simple_dram_model;
 
   gpgpu_context *gpgpu_ctx;
@@ -435,6 +436,7 @@ class gpgpu_sim_config : public power_config,
   char *gpgpu_runtime_stat;
   bool gpgpu_flush_l1_cache;
   bool gpgpu_flush_l2_cache;
+  bool gpgpu_invalidate_l2_cache;
   bool gpu_deadlock_detect;
   int gpgpu_frfcfs_dram_sched_queue_size;
   int gpgpu_cflog_interval;
@@ -722,6 +724,9 @@ class gpgpu_sim : public gpgpu_t {
     m_functional_sim = false;
     m_functional_sim_kernel = NULL;
   }
+
+ public:
+  std::vector<std::pair<size_t, size_t>> memcpy_addrs; // for jetson
 };
 
 class exec_gpgpu_sim : public gpgpu_sim {
