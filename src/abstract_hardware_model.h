@@ -406,6 +406,7 @@ class core_config {
     return ((addr / WORD_SIZE) % num_shmem_bank);
   }
   unsigned mem_warp_parts;
+  bool mem_warp_parts_dynamic;
   mutable unsigned gpgpu_shmem_size;
   char *gpgpu_shmem_option;
   std::vector<unsigned> shmem_opt_list;

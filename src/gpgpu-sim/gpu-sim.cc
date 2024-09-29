@@ -466,14 +466,14 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          "Number of portions a warp is divided into for shared "
                          "memory bank conflict check ",
                          "2");
+  option_parser_register(opp, "-gpgpu_shmem_warp_parts_dynamic", OPT_BOOL,
+                         &mem_warp_parts_dynamic,
+                         "Enable dynamic warp parts. This feature is introduced after ampere. "
+                         "See slide 37 of https://developer.download.nvidia.com/video/gputechconf/gtc/2020/presentations/s21745-developing-cuda-kernels-to-push-tensor-cores-to-the-absolute-limit-on-nvidia-a100.pdf ",
+                         "0");
   option_parser_register(
       opp, "-gpgpu_mem_unit_ports", OPT_INT32, &mem_unit_ports,
       "The number of memory transactions allowed per core cycle", "1");
-  option_parser_register(opp, "-gpgpu_shmem_warp_parts", OPT_INT32,
-                         &mem_warp_parts,
-                         "Number of portions a warp is divided into for shared "
-                         "memory bank conflict check ",
-                         "2");
   option_parser_register(
       opp, "-gpgpu_warpdistro_shader", OPT_INT32, &gpgpu_warpdistro_shader,
       "Specify which shader core to collect the warp size distribution from",

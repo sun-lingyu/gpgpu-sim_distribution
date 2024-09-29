@@ -328,9 +328,20 @@ void warp_inst_t::generate_mem_accesses() {
   switch (space.get_type()) {
     case shared_space:
     case sstarr_space: {
-      unsigned subwarp_size = m_config->warp_size / m_config->mem_warp_parts;
+      unsigned mem_warp_parts;
+      if (m_config->mem_warp_parts_dynamic){ // should be enabled after (include) ampere/sm_80.
+        if (data_size == 16)
+          mem_warp_parts = 4;
+        else if (data_size == 8)
+          mem_warp_parts = 2;
+        else if (data_size == 4)
+          mem_warp_parts = m_config->mem_warp_parts;
+        else
+          abort();
+      }
+      unsigned subwarp_size = m_config->warp_size / mem_warp_parts;
       unsigned total_accesses = 0;
-      for (unsigned subwarp = 0; subwarp < m_config->mem_warp_parts;
+      for (unsigned subwarp = 0; subwarp < mem_warp_parts;
            subwarp++) {
         // data structures used per part warp
         std::map<unsigned, std::map<new_addr_type, unsigned> >
@@ -340,13 +351,15 @@ void warp_inst_t::generate_mem_accesses() {
         for (unsigned thread = subwarp * subwarp_size;
              thread < (subwarp + 1) * subwarp_size; thread++) {
           if (!active(thread)) continue;
-          new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[0];
-          // FIXME: deferred allocation of shared memory should not accumulate
-          // across kernel launches assert( addr < m_config->gpgpu_shmem_size );
-          unsigned bank = m_config->shmem_bank_func(addr);
-          new_addr_type word =
+          for (unsigned word_idx = 0; word_idx * m_config->WORD_SIZE < data_size; word_idx++){
+            new_addr_type addr = m_per_scalar_thread[thread].memreqaddr[0] + word_idx * m_config->WORD_SIZE;
+            // FIXME: deferred allocation of shared memory should not accumulate
+            // across kernel launches assert( addr < m_config->gpgpu_shmem_size );
+            unsigned bank = m_config->shmem_bank_func(addr);
+            new_addr_type word =
               line_size_based_tag_func(addr, m_config->WORD_SIZE);
-          bank_accs[bank][word]++;
+            bank_accs[bank][word]++;
+          }
         }
 
         if (m_config->shmem_limited_broadcast) {
@@ -411,6 +424,8 @@ void warp_inst_t::generate_mem_accesses() {
           total_accesses += max_bank_accesses;
         }
       }
+
+
       assert(total_accesses > 0 && total_accesses <= m_config->warp_size);
       cycles = total_accesses;  // shared memory conflicts modeled as larger
                                 // initiation interval
