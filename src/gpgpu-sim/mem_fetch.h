@@ -56,7 +56,7 @@ class mem_fetch {
   mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
             unsigned ctrl_size, unsigned wid, unsigned sid, unsigned tpc,
             const memory_config *config, unsigned long long cycle,
-            mem_fetch *original_mf = NULL, mem_fetch *original_wr_mf = NULL);
+            mem_fetch *original_mf = NULL, mem_fetch *original_wr_mf = NULL, mem_fetch *original_prefetch_mf = NULL);
   ~mem_fetch();
 
   void set_status(enum mem_fetch_status status, unsigned long long cycle);
@@ -99,6 +99,7 @@ class mem_fetch {
   bool isconst() const;
   enum mf_type get_type() const { return m_type; }
   bool isatomic() const;
+  unsigned get_l2_prefetch_size() const { return m_access.get_l2_prefetch_size(); }
 
   void set_return_timestamp(unsigned t) { m_timestamp2 = t; }
   void set_icnt_receive_time(unsigned t) { m_icnt_receive_time = t; }
@@ -127,6 +128,7 @@ class mem_fetch {
 
   mem_fetch *get_original_mf() { return original_mf; }
   mem_fetch *get_original_wr_mf() { return original_wr_mf; }
+  mem_fetch *get_original_prefetch_mf() { return original_prefetch_mf; }
 
  private:
   // request source information
@@ -174,6 +176,9 @@ class mem_fetch {
                      // size), so the pointer refers to the original request
   mem_fetch *original_wr_mf;  // this pointer refers to the original write req,
                               // when fetch-on-write policy is used
+  mem_fetch *original_prefetch_mf; // this pointer is set when l2_prefetch is
+                                   // enabled. It refers to the original read req.
+                                   // TODO(sly): check correctness
 };
 
 #endif

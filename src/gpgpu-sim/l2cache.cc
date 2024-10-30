@@ -470,6 +470,12 @@ void memory_sub_partition::cache_cycle(unsigned cycle) {
       if (mf->get_access_type() !=
           L2_WR_ALLOC_R) {  // Don't pass write allocate read request back to
                             // upper level cache
+        if (mf->get_original_prefetch_mf() != NULL){
+          // handle l2 prefetch
+          mem_fetch *temp = mf;
+          mf = mf->get_original_prefetch_mf();
+          delete temp;
+        }
         mf->set_reply();
         mf->set_status(IN_PARTITION_L2_TO_ICNT_QUEUE,
                        m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);

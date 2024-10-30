@@ -808,17 +808,18 @@ class mem_access_t {
  public:
   mem_access_t(gpgpu_context *ctx) { init(ctx); }
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
-               bool wr, gpgpu_context *ctx) {
+               bool wr, gpgpu_context *ctx, unsigned l2_prefetch_size = 0) {
     init(ctx);
     m_type = type;
     m_addr = address;
     m_req_size = size;
     m_write = wr;
+    m_l2_prefetch_size = l2_prefetch_size;
   }
   mem_access_t(mem_access_type type, new_addr_type address, unsigned size,
                bool wr, const active_mask_t &active_mask,
                const mem_access_byte_mask_t &byte_mask,
-               const mem_access_sector_mask_t &sector_mask, gpgpu_context *ctx)
+               const mem_access_sector_mask_t &sector_mask, gpgpu_context *ctx, unsigned l2_prefetch_size = 0)
       : m_warp_mask(active_mask),
         m_byte_mask(byte_mask),
         m_sector_mask(sector_mask) {
@@ -827,6 +828,7 @@ class mem_access_t {
     m_addr = address;
     m_req_size = size;
     m_write = wr;
+    m_l2_prefetch_size = l2_prefetch_size;
   }
 
   new_addr_type get_addr() const { return m_addr; }
@@ -837,6 +839,7 @@ class mem_access_t {
   enum mem_access_type get_type() const { return m_type; }
   mem_access_byte_mask_t get_byte_mask() const { return m_byte_mask; }
   mem_access_sector_mask_t get_sector_mask() const { return m_sector_mask; }
+  unsigned get_l2_prefetch_size() const { return m_l2_prefetch_size; }
 
   void print(FILE *fp) const {
     fprintf(fp, "addr=0x%llx, %s, size=%u, ", m_addr,
@@ -873,6 +876,8 @@ class mem_access_t {
         fprintf(fp, "unknown ");
         break;
     }
+    if (m_l2_prefetch_size != 0)
+      fprintf(fp, ", l2 prefetch size is %u", m_l2_prefetch_size);
   }
 
   gpgpu_context *gpgpu_ctx;
@@ -888,6 +893,7 @@ class mem_access_t {
   active_mask_t m_warp_mask;
   mem_access_byte_mask_t m_byte_mask;
   mem_access_sector_mask_t m_sector_mask;
+  unsigned m_l2_prefetch_size;
 };
 
 class mem_fetch;
@@ -1043,6 +1049,7 @@ class inst_t {
   unsigned initiation_interval;
 
   unsigned data_size;  // what is the size of the word being operated on?
+  unsigned l2_prefetch_size;
   memory_space_t space;
   cache_operator_type cache_op;
 

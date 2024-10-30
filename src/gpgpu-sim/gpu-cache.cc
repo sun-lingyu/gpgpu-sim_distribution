@@ -1052,7 +1052,11 @@ void baseline_cache::bandwidth_management::use_data_port(
 /// use the fill port
 void baseline_cache::bandwidth_management::use_fill_port(mem_fetch *mf) {
   // assume filling the entire line with the returned request
-  unsigned fill_cycles = m_config.get_atom_sz() / m_config.m_data_port_width;
+  unsigned fill_cycles;
+  if (mf->get_original_prefetch_mf() != NULL)
+    fill_cycles = mf->get_l2_prefetch_size() / m_config.m_data_port_width;
+  else
+    fill_cycles = m_config.get_atom_sz() / m_config.m_data_port_width;
   m_fill_port_occupied_cycles += fill_cycles;
 }
 
@@ -1182,14 +1186,18 @@ void baseline_cache::send_read_request(new_addr_type addr,
                                        evicted_block_info &evicted,
                                        std::list<cache_event> &events,
                                        bool read_only, bool wa) {
+  mem_fetch *original_prefetch_mf = mf;
+  if (mf->get_original_prefetch_mf() != NULL){
+    original_prefetch_mf = mf->get_original_prefetch_mf();
+  }
   new_addr_type mshr_addr = m_config.mshr_addr(mf->get_addr());
   bool mshr_hit = m_mshrs.probe(mshr_addr);
   bool mshr_avail = !m_mshrs.full(mshr_addr);
   if (mshr_hit && mshr_avail) {
     if (read_only)
-      m_tag_array->access(block_addr, time, cache_index, mf);
+      m_tag_array->access(block_addr, time, cache_index, original_prefetch_mf);
     else
-      m_tag_array->access(block_addr, time, cache_index, wb, evicted, mf);
+      m_tag_array->access(block_addr, time, cache_index, wb, evicted, original_prefetch_mf);
 
     m_mshrs.add(mshr_addr, mf);
     m_stats.inc_stats(mf->get_access_type(), MSHR_HIT);
@@ -1198,15 +1206,21 @@ void baseline_cache::send_read_request(new_addr_type addr,
   } else if (!mshr_hit && mshr_avail &&
              (m_miss_queue.size() < m_config.m_miss_queue_size)) {
     if (read_only)
-      m_tag_array->access(block_addr, time, cache_index, mf);
+      m_tag_array->access(block_addr, time, cache_index, original_prefetch_mf);
     else
-      m_tag_array->access(block_addr, time, cache_index, wb, evicted, mf);
+      m_tag_array->access(block_addr, time, cache_index, wb, evicted, original_prefetch_mf);
 
     m_mshrs.add(mshr_addr, mf);
     m_extra_mf_fields[mf] = extra_mf_fields(
         mshr_addr, mf->get_addr(), cache_index, mf->get_data_size(), m_config);
-    mf->set_data_size(m_config.get_atom_sz());
-    mf->set_addr(mshr_addr);
+    if (original_prefetch_mf == mf) {
+      // the following code should be intended for very old GPUs
+      // without coalesced memory access support (not 100% sure)
+      // keep the code unchanged for non-l2-prefetch requests
+      // to maintain backward compatibility
+      mf->set_data_size(m_config.get_atom_sz());
+      mf->set_addr(mshr_addr);
+    }
     m_miss_queue.push_back(mf);
     mf->set_status(m_miss_queue_status, time);
     if (!wa) events.push_back(cache_event(READ_REQUEST_SENT));
@@ -1369,14 +1383,13 @@ enum cache_request_status data_cache::wr_miss_wa_naive(
   // if(!send_write_allocate(mf, addr, block_addr, cache_index, time, events))
   //    return RESERVATION_FAIL;
 
-  const mem_access_t *ma =
-      new mem_access_t(m_wr_alloc_type, mf->get_addr(), m_config.get_atom_sz(),
+  const mem_access_t ma(m_wr_alloc_type, mf->get_addr(), m_config.get_atom_sz(),
                        false,  // Now performing a read
                        mf->get_access_warp_mask(), mf->get_access_byte_mask(),
                        mf->get_access_sector_mask(), m_gpu->gpgpu_ctx);
 
   mem_fetch *n_mf =
-      new mem_fetch(*ma, NULL, mf->get_ctrl_size(), mf->get_wid(),
+      new mem_fetch(ma, NULL, mf->get_ctrl_size(), mf->get_wid(),
                     mf->get_sid(), mf->get_tpc(), mf->get_mem_config(),
                     m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
 
@@ -1494,14 +1507,14 @@ enum cache_request_status data_cache::wr_miss_wa_fetch_on_write(
       return RESERVATION_FAIL;
     }
 
-    const mem_access_t *ma = new mem_access_t(
+    const mem_access_t ma(
         m_wr_alloc_type, mf->get_addr(), m_config.get_atom_sz(),
         false,  // Now performing a read
         mf->get_access_warp_mask(), mf->get_access_byte_mask(),
         mf->get_access_sector_mask(), m_gpu->gpgpu_ctx);
 
     mem_fetch *n_mf = new mem_fetch(
-        *ma, NULL, mf->get_ctrl_size(), mf->get_wid(), mf->get_sid(),
+        ma, NULL, mf->get_ctrl_size(), mf->get_wid(), mf->get_sid(),
         mf->get_tpc(), mf->get_mem_config(),
         m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle, NULL, mf);
 
@@ -1660,11 +1673,33 @@ enum cache_request_status data_cache::rd_miss_base(
     return RESERVATION_FAIL;
   }
 
+  // handle l2 prefetch
+  mem_fetch *n_mf = mf;
+  unsigned prefetch_size = mf->get_l2_prefetch_size();
+  if (m_wr_alloc_type == L2_WR_ALLOC_R && prefetch_size > 0) {
+    // prefetch enabled (only for L2 cache)
+    assert(m_wrbk_type == L2_WRBK_ACC);
+    assert(m_config.m_cache_type == SECTOR);
+    assert(!mf->is_write());
+    assert(mf->get_access_type() == GLOBAL_ACC_R);
+    const mem_access_t ma(
+        mf->get_access_type(), mf->get_addr() & ~(prefetch_size - 1),
+        prefetch_size, mf->is_write(), mf->get_access_warp_mask(),
+        mf->get_access_byte_mask(), mf->get_access_sector_mask(),
+        m_gpu->gpgpu_ctx, prefetch_size);
+    // prefetch size can be 64B/128B
+
+    n_mf = new mem_fetch(
+        ma, &mf->get_inst(), mf->get_ctrl_size(), mf->get_wid(), mf->get_sid(),
+        mf->get_tpc(), mf->get_mem_config(),
+        m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle, NULL, NULL, mf);
+  }
+
   new_addr_type block_addr = m_config.block_addr(addr);
   bool do_miss = false;
   bool wb = false;
   evicted_block_info evicted;
-  send_read_request(addr, block_addr, cache_index, mf, time, do_miss, wb,
+  send_read_request(addr, block_addr, cache_index, n_mf, time, do_miss, wb,
                     evicted, events, false, false);
 
   if (do_miss) {
@@ -1812,6 +1847,77 @@ enum cache_request_status l2_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
   return data_cache::access(addr, mf, time, events);
+}
+
+// This function is almost the same as baseline_Cache::fill
+// except for dealing with l2 prefetch
+void l2_cache::fill(mem_fetch *mf, unsigned time) {
+  extra_mf_fields_lookup::iterator e = m_extra_mf_fields.find(mf);
+  assert(e != m_extra_mf_fields.end());
+  assert(e->second.m_valid);
+  mf->set_data_size(e->second.m_data_size);
+  mf->set_addr(e->second.m_addr);
+
+  if (mf->get_original_prefetch_mf() != NULL) {
+    // handle L2 prefetch
+    // no need to check if this is l2 cache
+    // since only l2 cache can receive fill response with prefetch
+    assert(m_config.m_cache_type == SECTOR);
+    assert(!mf->is_write());
+    assert(mf->get_access_type() == GLOBAL_ACC_R);
+    // start_sector should be 0 or 2, since prefetch size can be 64B/128B
+    unsigned start_sector = (mf->get_addr() & (MAX_MEMORY_ACCESS_SIZE - 1)) / SECTOR_SIZE;
+    // sector_num should be 4 or 2
+    unsigned sector_num = mf->get_l2_prefetch_size() / SECTOR_SIZE;
+    for (unsigned sector_idx_offset = 0;
+         sector_idx_offset < sector_num; sector_idx_offset++) {
+      // create a temp_mf to fill each sector.
+      // the byte_mask is passed to cache_block_t::fill()
+      // but should not be used.
+      // only the sector_mask get used.
+      mem_access_sector_mask_t sector_mask;
+      sector_mask.set(start_sector + sector_idx_offset);
+      const mem_access_t ma(
+          GLOBAL_ACC_R, mf->get_addr() + sector_idx_offset * SECTOR_SIZE, SECTOR_SIZE,
+          false,  // should be read
+          mf->get_access_warp_mask(), mf->get_access_byte_mask(),
+          sector_mask, m_gpu->gpgpu_ctx, mf->get_l2_prefetch_size());
+      mem_fetch temp_mf(ma, NULL, mf->get_ctrl_size(), mf->get_wid(),
+                    mf->get_sid(), mf->get_tpc(), mf->get_mem_config(),
+                    m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+      if (m_config.m_alloc_policy == ON_MISS)
+        m_tag_array->fill(e->second.m_cache_index, time, &temp_mf);
+      else if (m_config.m_alloc_policy == ON_FILL) {
+        m_tag_array->fill(e->second.m_block_addr, time, &temp_mf, temp_mf.is_write());
+      } else
+        abort();
+    }
+  } else {
+    if (m_config.m_alloc_policy == ON_MISS)
+      m_tag_array->fill(e->second.m_cache_index, time, mf);
+    else if (m_config.m_alloc_policy == ON_FILL) {
+      m_tag_array->fill(e->second.m_block_addr, time, mf, mf->is_write());
+    } else
+      abort();
+  }
+
+  bool has_atomic = false;
+  m_mshrs.mark_ready(e->second.m_block_addr, has_atomic);
+  // prefetch mf should not be atomic
+  assert(!(has_atomic && mf->get_original_prefetch_mf() != NULL));
+  if (has_atomic) {
+    assert(m_config.m_alloc_policy == ON_MISS);
+    cache_block_t *block = m_tag_array->get_block(e->second.m_cache_index);
+    if (!block->is_modified_line()) {
+      m_tag_array->inc_dirty();
+    }
+    block->set_status(MODIFIED,
+                      mf->get_access_sector_mask());  // mark line as dirty for
+                                                      // atomic operation
+    block->set_byte_mask(mf);
+  }
+  m_extra_mf_fields.erase(mf);
+  m_bandwidth_management.use_fill_port(mf);
 }
 
 /// Access function for tex_cache

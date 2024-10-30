@@ -1704,6 +1704,8 @@ class l2_cache : public data_cache {
   virtual enum cache_request_status access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events);
+
+  void fill(mem_fetch *mf, unsigned time);
 };
 
 /*****************************************************************************/
