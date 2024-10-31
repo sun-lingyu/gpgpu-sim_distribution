@@ -178,7 +178,6 @@ class mem_fetch {
                               // when fetch-on-write policy is used
   mem_fetch *original_prefetch_mf; // this pointer is set when l2_prefetch is
                                    // enabled. It refers to the original read req.
-                                   // TODO(sly): check correctness
 };
 
 #endif
