@@ -334,7 +334,7 @@ void warp_inst_t::generate_mem_accesses() {
           mem_warp_parts = 4;
         else if (data_size == 8)
           mem_warp_parts = 2;
-        else if (data_size == 4)
+        else if (data_size <= 4)
           mem_warp_parts = m_config->mem_warp_parts;
         else
           abort();
