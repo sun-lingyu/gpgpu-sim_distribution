@@ -2072,7 +2072,7 @@ void gpgpu_sim::cycle() {
       }
 
       if (all_threads_complete && !m_memory_config->m_L2_config.disabled()) {
-        printf("Invalidate L2 caches (except memcpy)...\n");
+        // printf("Invalidate L2 caches (except memcpy)...\n");
         if (m_memory_config->m_L2_config.get_num_lines()) {
           int dlc = 0;
           for (unsigned i = 0; i < m_memory_config->m_n_mem; i++) {
