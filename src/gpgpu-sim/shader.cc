@@ -1080,7 +1080,13 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
       std::vector<warp_inst_t> l;
       m_warp[warp_id]->m_ldgdepbar_buf.push_back(l);
     }
-  } else if (next_inst->m_is_depbar) {  // Add for DEPBAR
+  } else if (next_inst->m_is_depbar && m_warp[warp_id]->m_ldgdepbar_id >= 1
+    && m_warp[warp_id]->m_ldgdepbar_id >= m_warp[warp_id]->m_depbar_group) {  // Add for DEPBAR
+
+      // ignore DEPBAR when there is no LDGSTS/LDGDEPBAR instructions during simulation
+      // since DEPBAR is also used for scoreboarding non-LDGSTS instructions.
+      // This should be already handled in GPGPU-Sim's scoreboard unit.
+
     // Set to true immediately when a DEPBAR instruction is met
     m_warp[warp_id]->m_waiting_ldgsts = true;
     m_warp[warp_id]->m_depbar_group =
