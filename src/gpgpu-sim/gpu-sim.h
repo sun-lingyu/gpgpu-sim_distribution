@@ -437,6 +437,7 @@ class gpgpu_sim_config : public power_config,
   bool gpgpu_flush_l1_cache;
   bool gpgpu_flush_l2_cache;
   bool gpgpu_invalidate_l2_cache;
+  bool gpgpu_include_dram_cycle;
   bool gpu_deadlock_detect;
   int gpgpu_frfcfs_dram_sched_queue_size;
   int gpgpu_cflog_interval;
@@ -530,6 +531,7 @@ class gpgpu_sim : public gpgpu_t {
 
   void init();
   void cycle();
+  void l2_flush_cycle();
   bool active();
   bool cycle_insn_cta_max_hit() {
     return (m_config.gpu_max_cycle_opt && (gpu_tot_sim_cycle + gpu_sim_cycle) >=

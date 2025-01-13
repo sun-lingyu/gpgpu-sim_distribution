@@ -954,7 +954,8 @@ class tag_array {
   enum cache_request_status access(new_addr_type addr, unsigned time,
                                    unsigned &idx, bool &wb,
                                    evicted_block_info &evicted, mem_fetch *mf);
-
+  bool is_used_cache() { return is_used; }
+  void set_unused_cache() { is_used = false; m_dirty = false; }
   void fill(new_addr_type addr, unsigned time, mem_fetch *mf, bool is_write);
   void fill(unsigned idx, unsigned time, mem_fetch *mf);
   void fill(new_addr_type addr, unsigned time, mem_access_sector_mask_t mask,
@@ -1487,7 +1488,8 @@ class data_cache : public baseline_cache {
     m_wrbk_type = wrbk_type;
     m_gpu = gpu;
   }
-
+  void flushL2(unsigned time,
+                          std::list<cache_event> &event);
   virtual ~data_cache() {}
 
   virtual void init(mem_fetch_allocator *mfcreator) {
@@ -1700,11 +1702,13 @@ class l2_cache : public data_cache {
                    L2_WR_ALLOC_R, L2_WRBK_ACC, gpu) {}
 
   virtual ~l2_cache() {}
-
+  bool isempty()
+  {
+    return m_miss_queue.empty();
+  }
   virtual enum cache_request_status access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events);
-
   void fill(mem_fetch *mf, unsigned time);
 };
 

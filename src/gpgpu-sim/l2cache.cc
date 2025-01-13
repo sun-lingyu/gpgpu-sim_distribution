@@ -95,6 +95,8 @@ memory_partition_unit::memory_partition_unit(unsigned partition_id,
   }
 }
 
+
+
 void memory_partition_unit::handle_memcpy_to_gpu(
     size_t addr, unsigned global_subpart_id, mem_access_sector_mask_t mask) {
   unsigned p = global_sub_partition_id_to_local_id(global_subpart_id);
@@ -185,6 +187,18 @@ void memory_partition_unit::arbitration_metadata::print(FILE *fp) const {
   fprintf(fp, "(limit = %d)\n", m_private_credit_limit);
   fprintf(fp, "shared_credit = %d (limit = %d)\n", m_shared_credit,
           m_shared_credit_limit);
+}
+
+
+bool memory_partition_unit::dram_is_busy() const
+{
+  for (unsigned i = 0; i < m_config->m_n_sub_partition_per_memory_channel; i++) {
+    if (!m_sub_partition[i]->L2_dram_queue_empty()) return true;
+    if (!m_sub_partition[i]->m_l2_isempty()) return true;
+  }
+  if (!m_dram->isempty()) return true;
+  if (!m_dram_latency_queue.empty()) return true;
+  return false;
 }
 
 bool memory_partition_unit::busy() const {
@@ -706,7 +720,9 @@ void gpgpu_sim::print_dram_stats(FILE *fout) const {
 
 unsigned memory_sub_partition::flushL2() {
   if (!m_config->m_L2_config.disabled()) {
-    m_L2cache->flush();
+    std::list<cache_event> events;
+    m_L2cache->flushL2(m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle +
+                                  m_memcpy_cycle_offset,events);
   }
   return 0;  // TODO: write the flushed data to the main memory
 }

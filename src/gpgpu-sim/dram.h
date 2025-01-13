@@ -114,7 +114,7 @@ class dram_t {
   dram_t(unsigned int parition_id, const memory_config *config,
          class memory_stats_t *stats, class memory_partition_unit *mp,
          class gpgpu_sim *gpu);
-
+  bool isempty() const;
   bool full(bool is_write) const;
   void print(FILE *simFile) const;
   void visualize() const;

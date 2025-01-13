@@ -2065,4 +2065,40 @@ void tex_cache::display_state(FILE *fp) const {
     f.m_request->print(fp, false);
   }
 }
+
+
+void data_cache::flushL2(unsigned time,std::list<cache_event> &events) {
+  if (!m_tag_array->is_used_cache()) return;
+
+  for (unsigned i = 0; i < m_config.get_num_lines(); i++)
+  {
+    cache_block_t * this_line = m_tag_array->get_block(i);
+    if (this_line->is_modified_line()) {
+
+      
+      evicted_block_info evicted;
+
+      evicted.set_info(this_line->m_block_addr,
+                           this_line->get_modified_size(),
+                           this_line->get_dirty_byte_mask(),
+                           this_line->get_dirty_sector_mask());
+
+      mem_fetch *wb = m_memfetch_creator->alloc(
+            evicted.m_block_addr, m_wrbk_type, evicted.m_modified_size,
+            true, m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+        // the evicted block may have wrong chip id when advanced L2 hashing  is
+        // used, so set the right chip address from the original mf
+      // generate a write-through
+      send_write_request(wb, cache_event(WRITE_BACK_REQUEST_SENT, evicted),
+                         time, events);
+      for (unsigned j = 0; j < SECTOR_CHUNCK_SIZE; j++) {
+        this_line->set_status(INVALID, mem_access_sector_mask_t().set(j));
+      }
+    }
+  }
+
+  m_tag_array->set_unused_cache();
+}
+
+
 /******************************************************************************************************************************************/

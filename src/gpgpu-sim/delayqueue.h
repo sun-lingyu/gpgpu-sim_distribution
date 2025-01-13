@@ -100,6 +100,7 @@ class fifo_pipeline {
         assert(m_head == NULL);
         m_tail = m_head;
       }
+      if(m_n_element > 0)
       m_n_element--;
       if (m_min_len && m_length < m_min_len) {
         push(NULL);
@@ -157,7 +158,7 @@ class fifo_pipeline {
   bool is_avilable_size(unsigned size) const {
     return (m_max_len && m_length + size - 1 >= m_max_len);
   }
-  bool empty() const { return m_head == NULL; }
+  bool empty() const { return m_head == NULL || m_n_element == 0; }
   unsigned get_n_element() const { return m_n_element; }
   unsigned get_length() const { return m_length; }
   unsigned get_max_len() const { return m_max_len; }

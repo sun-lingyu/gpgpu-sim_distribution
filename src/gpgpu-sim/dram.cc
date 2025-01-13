@@ -245,6 +245,11 @@ dram_req_t::dram_req_t(class mem_fetch *mf, unsigned banks,
 }
 
 void dram_t::push(class mem_fetch *data) {
+  // if (data == NULL) {
+  //   printf("mem_fetch *data is a null pointer!\n");
+  // } else {
+  //   // printf("mem_fetch *data pointer value: %p\n", data);
+  // }
   assert(id == data->get_tlx_addr()
                    .chip);  // Ensure request is in correct memory partition
 
@@ -884,3 +889,9 @@ unsigned dram_t::get_bankgrp_number(unsigned i) {
   }
   return 0;  // we should never get here
 }
+
+bool dram_t::isempty() const
+  {
+    if (!rwq->empty() || !mrqq->empty() || !returnq->empty()) return false;
+    return true;
+  }

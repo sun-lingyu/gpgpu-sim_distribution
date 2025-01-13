@@ -699,6 +699,9 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL,
                          &gpgpu_flush_l2_cache,
                          "Flush L2 cache at the end of each kernel call", "0");
+  option_parser_register(opp, "-gpgpu_include_dram_cycle", OPT_BOOL,
+                         &gpgpu_include_dram_cycle,
+                         "add_simulation_for_dram_writeback_cycle", "0");
   option_parser_register(opp, "-gpgpu_invalidate_l2_cache", OPT_BOOL,
                          &gpgpu_invalidate_l2_cache,
                          "Invalidate L2 cache at the end of each kernel call", "0");
@@ -1106,8 +1109,15 @@ bool gpgpu_sim::active() {
   for (unsigned i = 0; i < m_memory_config->m_n_mem; i++)
     if (m_memory_partition_unit[i]->busy() > 0) return true;
   ;
+  if(m_config.gpgpu_include_dram_cycle)
+  {
+  for (unsigned i = 0; i < m_memory_config->m_n_mem; i++)
+    if (m_memory_partition_unit[i]->dram_is_busy() > 0) return true;
+  ;
+  }
   if (icnt_busy()) return true;
   if (get_more_cta_left()) return true;
+  
   return false;
 }
 
@@ -2155,6 +2165,37 @@ void gpgpu_sim::cycle() {
 #endif
   }
 }
+
+void gpgpu_sim::l2_flush_cycle(){
+  if (m_config.gpgpu_include_dram_cycle)
+  {
+    int dlc = 0;
+    for (unsigned i = 0; i < m_memory_config->m_n_mem_sub_partition; i++) {
+      dlc = m_memory_sub_partition[i]->flushL2();
+      assert(dlc == 0);  
+      printf("Dirty lines flushed from L2 %d is %d\n", i, dlc);
+    }
+    unsigned finished_kernel_uid = 0;
+    unsigned _active = 0;
+    do {
+      if (!active()) break;
+      // performance simulation
+      if (active()) {
+        cycle();
+        deadlock_check();
+      } else {
+        if (cycle_insn_cta_max_hit()) {
+          // m_gpgpu_context->the_gpgpusim->g_stream_manager
+          //     ->stop_all_running_kernels();
+          break;
+        }
+      }
+      _active = active();
+      finished_kernel_uid = finished_kernel();
+    } while (_active && !finished_kernel_uid);
+  }
+}
+
 
 void shader_core_ctx::dump_warp_state(FILE *fout) const {
   fprintf(fout, "\n");

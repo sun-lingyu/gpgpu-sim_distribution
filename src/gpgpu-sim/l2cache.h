@@ -75,7 +75,7 @@ class memory_partition_unit {
   memory_partition_unit(unsigned partition_id, const memory_config *config,
                         class memory_stats_t *stats, class gpgpu_sim *gpu);
   ~memory_partition_unit();
-
+  bool dram_is_busy() const;
   bool busy() const;
 
   void cache_cycle(unsigned cycle);
@@ -166,6 +166,8 @@ class memory_sub_partition {
 
   unsigned get_id() const { return m_id; }
 
+
+
   bool busy() const;
 
   void cache_cycle(unsigned cycle);
@@ -205,6 +207,11 @@ class memory_sub_partition {
                            mem_access_sector_mask_t mask) {
     m_L2cache->force_tag_access(addr, m_memcpy_cycle_offset + time, mask);
     m_memcpy_cycle_offset += 1;
+  }
+
+  bool m_l2_isempty()
+  {
+    return m_L2cache->isempty();
   }
 
  private:
